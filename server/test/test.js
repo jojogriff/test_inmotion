@@ -14,20 +14,23 @@ const chaiHttp = require('chai-http');
 const server = require('../');
 const should = chai.should();
 var faker = require('faker');
-
+var email1 = faker.internet.email().toLowerCase()
 
 chai.use(chaiHttp)
 let user, movie
 
-const newUser = require("../../data/user")
-console.log(newUser)
+const newUser = {
+  email: email1,
+  password: 'ASecretSoBigNoOneCanBreak'
+}
+console.log(email1)
+const wrongPasswordUser = {
+  email: email1,
+  password: 'password'
+}
 
 describe('Authentication Tests', function() {
 
-  const wrongPasswordUser = {
-    email: `coolguyaaron@gmail.com`,
-    password: 'password'
-  }
 
   // this is expected to work the first time. Fail everytime thereafter
   describe('Registration', function() {
@@ -39,6 +42,7 @@ describe('Authentication Tests', function() {
         res.body.user.should.be.a('object');
         res.body.user.should.have.property('_id');
         res.body.user.should.have.property('token');
+        email = res.body.email
         done();
       });
     });
@@ -55,7 +59,6 @@ describe('Authentication Tests', function() {
       });
     });
   });
-console.log(newUser)
   describe('Login', function() {
     it('Should login successfully', function (done) {
       chai.request(server).post('/login').send(newUser).end(function (err, res) {
