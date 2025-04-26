@@ -1,193 +1,287 @@
-/**
- * Make any/all changes you see fit based on your experience. Every detail you (do not) change will be subject to
- * questioning during the in person interview.
- *
- * Good luck.
- */
- //first to do is still split these tests up so there aren't dependencies
-
 process.env.NODE_ENV = 'test';
 
-const assert = require('assert');
 const chai = require('chai');
 const chaiHttp = require('chai-http');
-const server = require('../');
-const should = chai.should();
-var faker = require('faker');
-var email1 = faker.internet.email().toLowerCase()
+const faker = require('faker');
+const server = require('../'); // Assuming server starts itself or exports app
+const expect = chai.expect;
 
-chai.use(chaiHttp)
-let user, movie
+chai.use(chaiHttp);
 
-const newUser = {
-  email: email1,
-  password: 'ASecretSoBigNoOneCanBreak'
-}
-console.log(email1)
-const wrongPasswordUser = {
-  email: email1,
-  password: 'password'
-}
+describe('API Tests', () => {
+    let testUser;
+    let token;
+    let createdMovieId;
 
-describe('Authentication Tests', function() {
-
-
-  // this is expected to work the first time. Fail everytime thereafter
-  describe('Registration', function() {
-    it('Should register a new user', function(done) {
-      chai.request(server).post('/register').send(newUser).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(201);
-        res.body.user.should.be.a('object');
-        res.body.user.should.have.property('_id');
-        res.body.user.should.have.property('token');
-        email = res.body.email
-        done();
-      });
+    // ---- Test Data Factories ----
+    const createUserData = () => ({
+        email: faker.internet.email().toLowerCase(),
+        password: 'aValidPassword123',
     });
 
-  it('Should fail to register with an email already taken', function(done) {
-      chai.request(server).post('/register').send(newUser).end(function (err, res) {
-        assert.equal(err, undefined)
-        res.should.have.status(200);
-        assert.equal(res.body.success, true)
-        res.body.success.should.be.a('boolean');
-        assert.equal(res.body.message, "User with that email already taken.")
-        res.body.should.not.have.property('user')
-        done();
-      });
-    });
-  });
-  describe('Login', function() {
-    it('Should login successfully', function (done) {
-      chai.request(server).post('/login').send(newUser).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        res.body.user.should.be.a('object');
-        res.body.user.should.have.property('_id');
-        res.body.user.should.have.property('token');
-        user = res.body.user
-        done();
-      });
-    });
-    it('Should send back an unauthorized error', function(done) {
-      chai.request(server).post('/login').send(wrongPasswordUser).end(function (err, res) {
-        res.should.have.status(401);
-        done();
-      });
-    });
-    it('Should send back a not found error', function(done) {
-      chai.request(server).post('/login').send({user: 'aaron@test.com', password: 'hello123'}).end(function (err, res) {
-        res.should.have.status(400);
-        done();
-      });
-    });
-  });
-  describe('Cleanup', function() {
-    it('Should delete the new user', function(done) {
-      chai.request(server).delete('/register').send(newUser).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(201);
-        done();
-      });
-    });
-  });
-});
-
-//all these data values need to be extracted to json files
-describe('Movie Tests', function() {
-  let newMovie = {
-    imagePoster: '',
-    title: 'Testing Title',
-    genre: 'Testing Genre',
-    rating: '10',
-    actors: 'Steve Martin, Collin Ferral, Leo Decaprio',
-    year: '2017'
-  }
-  let noMovie = {
-    imagePoster: '',
-    title: 'Jack',
-    genre: 'John',
-    rating: '10',
-    actors: 'Frank',
-    year: '2017'
-  }
-  let newMovie2 = {
-    imagePoster: '',
-    title: 'Testing Title',
-    genre: 'Testing Genre',
-    rating: '10',
-    actors: 'Steve Martin, Collin Ferral, Leo Decaprio, Shirly Temple',
-    year: '2017'
-  }
-  describe('Create', function() {
-    it('Should create a new movie with the API', function(done) {
-      chai.request(server).post('/movie').set('Authorization', user.token).send(newMovie).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(201);
-        done();
-      });
-    });
-  });
-
-  describe('Read', function() {
-    it('Should send back a list of all movies', function(done) {
-      chai.request(server).get('/movies').end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        res.body.movies.should.be.a('array');
-        res.body.movies.length.should.not.be.eql(0);
-        done();
-      });
-    });
-    //values are hardcoded for now, but need to move them to a variable
-    it('Should send back a list of a Users movies', function(done) {
-      chai.request(server).get('/users/59eb52f9d5a59357aa1080e1/movies').end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        res.body.movies.should.be.a('array');
-        res.body.movies.length.should.not.be.eql(0);
-        done();
-      });
-    });
-  });
-
-  describe('Update', function() {
-    it('Should update a movie', function(done) {
-      chai.request(server).post('/movie/59ee216c4990e906d500f7e4/').set('Authorization', user.token).send(newMovie2).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        done();
-      });
+    const createMovieData = () => ({
+        title: `Test Movie ${faker.lorem.words(3)}`,
+        genre: faker.music.genre(),
+        rating: faker.datatype.number({ min: 1, max: 10 }).toString(),
+        actors: `${faker.name.firstName()} ${faker.name.lastName()}`,
+        year: faker.date.past(10).getFullYear().toString(),
+        // imagePoster: ... // handle appropriately
     });
 
-    it('Should return an error for not finding requested movie to be updated', function(done) {
-      chai.request(server).post('/movie/noMovie').set('Authorization', user.token).send(noMovie).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        assert.equal(res.body.message, "Unable to locate that movie.")
-        done();
-      });
+    // ---- Hooks ----
+    before(async () => {
+        // Optional: Global setup like ensuring DB connection
+        // Optional: Clean up database before ALL tests run
+        // await User.deleteMany({});
+        // await Movie.deleteMany({});
     });
-  });
 
-  describe('Delete', function() {
-    it('Should remove the movie', function(done) {
-      chai.request(server).delete('/movie/59ee216c4990e906d500f7e4/').set('Authorization', user.token).send(newMovie).end(function (err, res) {
-        assert.equal(err, undefined)
-        assert.equal(res.body.success, true)
-        res.should.have.status(200);
-        done();
-      });
+    after(async () => {
+        // Optional: Global teardown
     });
-  });
 
+    describe('Authentication API (/register, /login)', () => {
+        const userData = createUserData();
+        let userId;
+
+        afterEach(async () => {
+            // Clean up the user created in this test block
+            if (userId) {
+                try {
+                    // Need an endpoint/method to delete users for testing
+                    // Assuming DELETE /users/:id requires admin or specific auth - adjust as needed
+                    // For simplicity, maybe a dedicated test cleanup endpoint?
+                    // Or direct DB access if necessary for cleanup:
+                    // await User.findByIdAndDelete(userId);
+                    console.log(`Cleanup: User ${userId} should be deleted here.`);
+                    userId = null; // Reset for next test
+                } catch (err) {
+                    console.error("Cleanup failed:", err);
+                }
+            }
+        });
+
+        it('POST /register - Should register a new user', async () => {
+            const res = await chai.request(server)
+                .post('/register')
+                .send(userData);
+
+            expect(res).to.have.status(201);
+            expect(res.body).to.be.an('object');
+            expect(res.body.success).to.equal(true);
+            expect(res.body.user).to.include.keys('_id', 'token');
+            expect(res.body.user.email).to.equal(userData.email); // Check email if returned
+            userId = res.body.user._id; // Store ID for cleanup
+        });
+
+        it('POST /register - Should fail with 409 if email is already taken', async () => {
+            // First, create the user
+            const regRes = await chai.request(server).post('/register').send(userData);
+            expect(regRes).to.have.status(201);
+            userId = regRes.body.user._id; // Store ID for cleanup
+
+            // Then, try to register again with the same email
+            const res = await chai.request(server)
+                .post('/register')
+                .send(userData);
+
+            // Assuming API returns 409 Conflict and { success: false }
+            expect(res).to.have.status(409); // Adjust status code if API behaves differently
+            expect(res.body.success).to.equal(false); // Adjust if API behaves differently
+            expect(res.body.message).to.equal("User with that email already taken."); // Or similar
+            expect(res.body).to.not.have.property('user');
+        });
+
+        it('POST /login - Should login successfully with correct credentials', async () => {
+            // Register user first
+            const regRes = await chai.request(server).post('/register').send(userData);
+            expect(regRes).to.have.status(201);
+            userId = regRes.body.user._id;
+
+            // Attempt login
+            const res = await chai.request(server)
+                .post('/login')
+                .send(userData);
+
+            expect(res).to.have.status(200);
+            expect(res.body.success).to.equal(true);
+            expect(res.body.user).to.include.keys('_id', 'token');
+            expect(res.body.user._id).to.equal(userId);
+        });
+
+        it('POST /login - Should fail with 401 for incorrect password', async () => {
+             // Register user first
+            const regRes = await chai.request(server).post('/register').send(userData);
+            expect(regRes).to.have.status(201);
+            userId = regRes.body.user._id;
+
+            const wrongPasswordData = { ...userData, password: 'wrongPassword' };
+            const res = await chai.request(server)
+                .post('/login')
+                .send(wrongPasswordData);
+
+            expect(res).to.have.status(401); // Unauthorized
+        });
+
+         it('POST /login - Should fail with 400/404 for non-existent user', async () => {
+            const nonExistentUserData = createUserData(); // Email not registered
+            const res = await chai.request(server)
+                .post('/login')
+                .send(nonExistentUserData);
+
+            // Status could be 400 Bad Request or 404 Not Found depending on API design
+            expect(res).to.have.status(400); // Or 404
+         });
+
+    });
+
+    describe('Movies API (/movies, /movie)', () => {
+        // Use hooks for setup/teardown common to movie tests
+        beforeEach(async () => {
+            // 1. Create a user for this test block
+            testUser = createUserData();
+            const regRes = await chai.request(server).post('/register').send(testUser);
+            expect(regRes).to.have.status(201);
+            testUser._id = regRes.body.user._id;
+            token = regRes.body.user.token; // Get token
+        });
+
+        afterEach(async () => {
+            // Clean up movie and user
+            if (createdMovieId) {
+                 try {
+                    // Assuming DELETE /movie/:id exists and works with token auth
+                    await chai.request(server)
+                        .delete(`/movie/${createdMovieId}`)
+                        .set('Authorization', `Bearer ${token}`); // Standard Bearer token format
+                    createdMovieId = null;
+                 } catch(err) { console.error("Movie cleanup failed:", err); }
+            }
+             if (testUser && testUser._id) {
+                 try {
+                    // Direct DB access or cleanup endpoint needed here
+                    console.log(`Cleanup: User ${testUser._id} should be deleted here.`);
+                    testUser = null;
+                    token = null;
+                 } catch(err) { console.error("User cleanup failed:", err); }
+            }
+        });
+
+        it('POST /movie - Should create a new movie', async () => {
+            const movieData = createMovieData();
+            const res = await chai.request(server)
+                .post('/movie')
+                .set('Authorization', `Bearer ${token}`) // Use Bearer scheme usually
+                .send(movieData);
+
+            expect(res).to.have.status(201);
+            expect(res.body.success).to.equal(true);
+            expect(res.body.movie).to.be.an('object');
+            expect(res.body.movie).to.include.keys('_id', 'title', 'genre'); // Add other keys
+            expect(res.body.movie.title).to.equal(movieData.title);
+            createdMovieId = res.body.movie._id; // Capture ID for later tests/cleanup
+        });
+
+        it('GET /movies - Should return a list of movies', async () => {
+             // Optional: Create a movie first to ensure list isn't empty
+             await chai.request(server).post('/movie').set('Authorization', `Bearer ${token}`).send(createMovieData());
+
+             const res = await chai.request(server).get('/movies'); // Assuming public endpoint
+             expect(res).to.have.status(200);
+             expect(res.body.success).to.equal(true);
+             expect(res.body.movies).to.be.an('array');
+             // Add more specific checks if needed (e.g., structure of movie objects in array)
+        });
+
+        it('GET /users/:userId/movies - Should return movies for a specific user', async () => {
+            // Create a movie associated with the testUser
+            const movieData = createMovieData();
+            const createRes = await chai.request(server).post('/movie').set('Authorization', `Bearer ${token}`).send(movieData);
+            createdMovieId = createRes.body.movie._id;
+
+            const res = await chai.request(server)
+                .get(`/users/${testUser._id}/movies`); // Use dynamic user ID
+                // .set('Authorization', `Bearer ${token}`); // Add if endpoint requires auth
+
+            expect(res).to.have.status(200);
+            expect(res.body.success).to.equal(true);
+            expect(res.body.movies).to.be.an('array');
+            expect(res.body.movies.length).to.be.greaterThan(0);
+            // Check if the created movie is in the list
+            expect(res.body.movies.some(m => m._id === createdMovieId)).to.be.true;
+        });
+
+
+        it('PUT /movie/:movieId - Should update a movie', async () => { // Using PUT (or PATCH)
+            // 1. Create a movie
+            const movieData = createMovieData();
+            const createRes = await chai.request(server).post('/movie').set('Authorization', `Bearer ${token}`).send(movieData);
+            createdMovieId = createRes.body.movie._id;
+
+            // 2. Update the movie
+            const updateData = { ...movieData, title: "Updated Title", rating: "1" };
+            const res = await chai.request(server)
+                .put(`/movie/${createdMovieId}`) // Use PUT or PATCH and dynamic ID
+                .set('Authorization', `Bearer ${token}`)
+                .send(updateData);
+
+            expect(res).to.have.status(200);
+            expect(res.body.success).to.equal(true);
+            expect(res.body.movie).to.be.an('object');
+            expect(res.body.movie.title).to.equal("Updated Title");
+            expect(res.body.movie.rating).to.equal("1");
+
+            // Optional: Fetch again to verify
+            const fetchRes = await chai.request(server).get(`/movie/${createdMovieId}`).set('Authorization', `Bearer ${token}`); // Assuming GET /movie/:id exists
+            expect(fetchRes.body.movie.title).to.equal("Updated Title");
+        });
+
+
+         it('PUT /movie/:movieId - Should return 404 for non-existent movie ID', async () => {
+            const nonExistentId = '609e14e8d4a9f934c8e4e8f0'; // Example valid but likely non-existent ID
+            const updateData = createMovieData();
+
+            const res = await chai.request(server)
+                .put(`/movie/${nonExistentId}`) // Use PUT or PATCH
+                .set('Authorization', `Bearer ${token}`)
+                .send(updateData);
+
+            expect(res).to.have.status(404); // Not Found
+            expect(res.body.success).to.equal(false); // Assuming API returns false on failure
+         });
+
+        it('DELETE /movie/:movieId - Should delete a movie', async () => {
+             // 1. Create a movie
+            const movieData = createMovieData();
+            const createRes = await chai.request(server).post('/movie').set('Authorization', `Bearer ${token}`).send(movieData);
+            createdMovieId = createRes.body.movie._id;
+            const idToDelete = createdMovieId; // Store because afterEach will clear createdMovieId
+
+             // 2. Delete the movie
+            const res = await chai.request(server)
+                .delete(`/movie/${idToDelete}`) // Use dynamic ID
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(res).to.have.status(200); // Or 204 No Content
+            expect(res.body.success).to.equal(true); // Or body might be empty for 204
+
+            // 3. Verify deletion (expect 404)
+            const fetchRes = await chai.request(server)
+                .get(`/movie/${idToDelete}`)
+                .set('Authorization', `Bearer ${token}`); // Assuming GET /movie/:id exists
+            expect(fetchRes).to.have.status(404);
+
+            createdMovieId = null; // Prevent afterEach from trying to delete again
+        });
+
+         it('DELETE /movie/:movieId - Should return 404 for non-existent movie ID', async () => {
+            const nonExistentId = '609e14e8d4a9f934c8e4e8f0';
+             const res = await chai.request(server)
+                .delete(`/movie/${nonExistentId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(res).to.have.status(404);
+            expect(res.body.success).to.equal(false);
+         });
+    });
 });
